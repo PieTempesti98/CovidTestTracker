@@ -16,7 +16,7 @@ int main(int argc, char* argv[]){
     ds_addr.sin_port = htons(porta);
     inet_pton(AF_INET, "127.0.0.1", &ds_addr.sin_addr);
 
-    ret = bind(udp_socket, (struct sockaddr_in*)&ds_addr, sizeof(ds_addr));
+    ret = bind(udp_socket, (struct sockaddr*)&ds_addr, sizeof(ds_addr));
     if(ret == -1) {
         perror("Bind error: ");
         exit(1);

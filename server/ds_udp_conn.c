@@ -5,10 +5,10 @@ void ds_boot(int sd){
     char buffer[1024];
     struct sockaddr_in peer_addr;
     while(1){
-        ret = recvfrom(sd, buffer, sizeof(int), 0, (struct sockaddr_in*)&peer_addr, sizeof(peer_addr));
+        ret = recvfrom(sd, buffer, sizeof(int), 0, (struct sockaddr*)&peer_addr, &sizeof(peer_addr));
         if(ret < 0){
             perror("Errore in ricezione sul socket UDP: ");
-            if(errno = EBADF){ //Il socket UDP e' stato chiuso
+            if(errno == EBADF){ //Il socket UDP e' stato chiuso
                 break;
             }
         }
