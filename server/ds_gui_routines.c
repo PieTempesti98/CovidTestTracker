@@ -10,7 +10,7 @@ void showpeers(struct peer* list){
     p = list;
     printf("Elenco dei peer connessi: \n");
     while(p != NULL){
-        printf("%d ", p->port);
+        printf("%d ", ntohs(p->addr.sin_port));
         p = p->next;
     }
     printf("\n");
@@ -18,7 +18,8 @@ void showpeers(struct peer* list){
 
 void showhelp(){
     printf("metodo help non ancora implementato\n");
-};
+}
+
 void showneighbor(struct peer* list, int peer){
     struct peer* p;
     if(list == NULL){
@@ -27,25 +28,25 @@ void showneighbor(struct peer* list, int peer){
     }
     p = list;
     while(p != NULL){
-        if(p->port == peer){
+        if(ntohs(p->addr.sin_port) == peer){
             struct peer* prev; struct peer* next;
             prev = p->previous;
             next = p->next;
             if(prev != NULL){
-                printf("1. %d\n", prev->port);
+                printf("1. %d\n", ntohs(prev->addr.sin_port));
                 if(next != NULL)
-                    printf("2. %d\n", next->port);
+                    printf("2. %d\n", ntohs(next->addr.sin_port));
             }
             else if(next != NULL)
-                printf("1. %d\n", next->port);
+                printf("1. %d\n", ntohs(next->addr.sin_port));
             else
-                printf("Il peer indicato al momento non ha neighbors");
+                printf("Il peer indicato al momento non ha neighbors\n");
             return;
         }
         p = p->next;
     }
     printf("Il peer indicato non e' connesso al ds\n");
-};
+}
 
 int gui(struct peer* list){
     char input[20];

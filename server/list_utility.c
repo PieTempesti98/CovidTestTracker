@@ -1,9 +1,9 @@
 #include "ds_headers.h"
 
-void list_add(struct peer* list, int peer){
+void list_add(struct peer* list, struct sockaddr_in peer){
     struct peer new, *p, *n;
 
-    new.port = peer;
+    new.addr = peer;
     if(list == NULL){ //aggiungo in testa
         list = &new;
         new.next = new.previous = NULL;
@@ -13,7 +13,7 @@ void list_add(struct peer* list, int peer){
     p = list;
     n = list->next;
     while(n != NULL){
-        if(n->port > peer){ //aggiungo in mezzo alla lista
+        if(ntohs(n->addr.sin_port) > ntohs(peer.sin_port)){ //aggiungo in mezzo alla lista
             p->next = &new;
             new.next = n;
             new.previous = p;
@@ -37,7 +37,7 @@ void list_add(struct peer* list, int peer){
 
 void list_remove(struct peer* list, int peer){
     struct peer *p, *q;
-    if(list->port == peer){
+    if(ntohs(list->addr.sin_port) == peer){
         //rimuovo il peer in testa e correggo il neighbor della nuova testa
         p = list;
         list = list->next;
@@ -48,7 +48,7 @@ void list_remove(struct peer* list, int peer){
     p = list;
     q = list->next;
     while(q != NULL){
-        if(q->port == peer){
+        if(ntohs(q->addr.sin_port) == peer){
             //rimuovo il peer e correggo i neighbors
             p->next = q->next;
             if(q->next != NULL){

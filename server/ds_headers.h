@@ -4,7 +4,7 @@
 
 //descrittore dei peer
 struct peer{
-    int port;
+    struct sockaddr_in addr;
     struct peer* previous;
     struct peer* next;
 };
@@ -13,5 +13,8 @@ struct peer{
 int gui(struct peer* list);
 
 //list_utility.c
-void list_add(struct peer* list, int peer);
+void list_add(struct peer* list, struct sockaddr_in peer);
 void list_remove(struct peer* list, int peer);
+
+//ds_udp_conn.c
+void ds_boot(int sd);
