@@ -1,6 +1,6 @@
 #include"ds_headers.h"
 
-void ds_boot(int sd){
+void ds_boot(int sd, peer* list, int* tot_peers){
     int ret, porta, rcv_msg;
     char buffer[1024];
     struct sockaddr_in peer_addr;
@@ -20,6 +20,7 @@ void ds_boot(int sd){
             }
             rcv_msg = sscanf("%d", buffer);
             if(rcv_msg == ntohs(peer_addr.sin_port)){ //il peer ha richiesto il boot, quindi lo aggiungo alla lista e sistemo i neighbors
+                list_add(list, peer_addr, tot_peers);
 
             }
         }

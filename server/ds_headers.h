@@ -5,16 +5,18 @@
 //descrittore dei peer
 struct peer{
     struct sockaddr_in addr;
-    struct peer* previous;
+    struct peer* shortcut;
     struct peer* next;
+    uint16_t pos;
+    uint8_t dirty;
 };
 
 //ds_gui_routines.c
-int gui(struct peer* list);
+int gui(struct peer* list, int *tot_peers);
 
 //list_utility.c
-void list_add(struct peer* list, struct sockaddr_in peer);
-void list_remove(struct peer* list, int peer);
+void list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers);
+void list_remove(struct peer* list, int peer, int* tot_peers);
 
 //ds_udp_conn.c
-void ds_boot(int sd);
+void ds_boot(int sd, struct peer* list, int* tot_peers);

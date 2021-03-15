@@ -1,65 +1,69 @@
 #include "ds_headers.h"
 
-void list_add(struct peer* list, struct sockaddr_in peer){
+void list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers){
     struct peer new, *p, *n;
 
     new.addr = peer;
-    if(list == NULL){ //aggiungo in testa
+    new.shortcut = NULL;
+    new.dirty = 1;
+    if(list == NULL){ //Lista vuota: primo peer
         list = &new;
-        new.next = new.previous = NULL;
-        // comunicazione col peer
-        return;
+        new.next = NULL;
+        new.pos = 0;
+
     }
-    p = list;
-    n = list->next;
-    while(n != NULL){
-        if(ntohs(n->addr.sin_port) > ntohs(peer.sin_port)){ //aggiungo in mezzo alla lista
-            p->next = &new;
-            new.next = n;
-            new.previous = p;
-            n->previous = &new;
-            //comunicazione col peer
-            return;
+    else {
+        p = list;
+        if(p->addr.sin_port > peer.sin_port){ //neighbor con numero di porta più piccolo, inserisco in testa
+            list = &new;
+            new.next = p;
+            new.pos = 0;
         }
-        p = p->next;
-        n = n->next;
+        else{
+            while (p->next != NULL && ntohs(p->addr.sin_port) > ntohs(peer.sin_port)) {
+                p = p->next;
+                n = n->next;
+            }
+            new.next = p->next;
+            new.pos = p->pos + 1;
+            p->dirty = 1;
+            p->next = &new;
+            if(new.next != NULL){ //aggiornamento delle posizioni: incremento la posizione in lista dei peer successivi a quello inserito
+                p = &new;
+                while(p->next != NULL){
+                    p = p->next;
+                    p->pos++;
+                }
+            }
+        }
+
     }
-    //inserisco in coda il nuovo peer e correggo i neighbors
-    n = p;
-    n->next = &new;
-    n = n->next;
-    n->previous = p;
-    if(p != list) {
-        list->previous = n;
-    }
-    //comunicazione col peer
+    *tot_peers ++;
+    //calcolo shortcut
 }
 
-void list_remove(struct peer* list, int peer){
-    struct peer *p, *q;
-    if(ntohs(list->addr.sin_port) == peer){
-        //rimuovo il peer in testa e correggo il neighbor della nuova testa
-        p = list;
+void list_remove(struct peer* list, int peer, int* tot_peers){
+    struct peer *p = list, *q = p->next;
+    if(ntohs(list->addr.sin_port) == peer){        //rimuovo il peer in testa
+
         list = list->next;
-        list->previous = p->previous;
-        //comunicazione coi peer a cui aggiornare i neighbor
-        return;
+        q = list;
     }
-    p = list;
-    q = list->next;
-    while(q != NULL){
-        if(ntohs(q->addr.sin_port) == peer){
-            //rimuovo il peer e correggo i neighbors
-            p->next = q->next;
-            if(q->next != NULL){
-                q = q->next;
-                q->previous = p;
-            }
-            //comunicazione coi peer a cui aggiornare i neighbors
-            return;
+    else {
+        while (p->next != NULL && ntohs(q->addr.sin_port) == peer) { //scorro la lista per cercare il peer da rimuovere
+            p = q;
+            q = q->next;
         }
-        p = q;
+        //rimuovo il peer e correggo i neighbors
+        p->next = q->next;
+        p->dirty = 1;
+    }
+    //aggiornamento della posizione per i peer successivi in lista a quello rimosso
+    while(q->next != NULL){
+        q->pos --;
         q = q->next;
     }
+    *tot_peers --;
+    //calcolo nuovi shortcut
 }
 

@@ -2,7 +2,7 @@
 
 int main(int argc, char* argv[]){
     int udp_socket, ret, pid;
-    int porta = atoi(argv[1]);
+    int porta = atoi(argv[1]), tot_peers = 0;
     struct peer* list = NULL;
     struct sockaddr_in ds_addr;
 
@@ -24,12 +24,12 @@ int main(int argc, char* argv[]){
     pid = fork();
 
     if(pid == 0){
-        ds_boot(udp_socket);
+        ds_boot(udp_socket, list, &tot_peers);
 
     }
     else {
         //Lancio dell'interfaccia di interazione
-        while (gui(list)) {}
+        while (gui(list, &tot_peers)) {}
         close(udp_socket);
     }
     exit(0);

@@ -29,11 +29,11 @@ void showneighbor(struct peer* list, int peer){
     p = list;
     while(p != NULL){
         if(ntohs(p->addr.sin_port) == peer){
-            struct peer* prev; struct peer* next;
-            prev = p->previous;
+            struct peer* shortcut; struct peer* next;
+            shortcut = p->shortcut;
             next = p->next;
-            if(prev != NULL){
-                printf("1. %d\n", ntohs(prev->addr.sin_port));
+            if(shortcut != NULL){
+                printf("1. %d\n", ntohs(shortcut->addr.sin_port));
                 if(next != NULL)
                     printf("2. %d\n", ntohs(next->addr.sin_port));
             }
@@ -48,7 +48,7 @@ void showneighbor(struct peer* list, int peer){
     printf("Il peer indicato non e' connesso al ds\n");
 }
 
-int gui(struct peer* list){
+int gui(struct peer* list, int tot_peers){
     char input[20];
 
     printf("Digita un comando:\n\n"
