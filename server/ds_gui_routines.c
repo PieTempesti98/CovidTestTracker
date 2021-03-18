@@ -48,7 +48,7 @@ void showneighbor(struct peer* list, int peer){
     printf("Il peer indicato non e' connesso al ds\n");
 }
 
-int gui(struct peer* list, int tot_peers){
+int gui(struct peer* list, const int *tot_peers){
     char input[20];
 
     printf("Digita un comando:\n\n"

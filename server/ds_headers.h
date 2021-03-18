@@ -12,11 +12,13 @@ struct peer{
 };
 
 //ds_gui_routines.c
-int gui(struct peer* list, int *tot_peers);
+int gui(struct peer* list, const int *tot_peers);
 
 //list_utility.c
-void list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers);
-void list_remove(struct peer* list, int peer, int* tot_peers);
+uint8_t list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers);
+uint8_t list_remove(struct peer* list, int peer, int* tot_peers);
+void shortcut(struct peer* list, int tot_peers);
 
 //ds_udp_conn.c
 void ds_boot(int sd, struct peer* list, int* tot_peers);
+void neighbors_update(int sd, const struct peer* list);
