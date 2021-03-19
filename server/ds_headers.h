@@ -15,10 +15,11 @@ struct peer{
 int gui(struct peer* list, const int *tot_peers);
 
 //list_utility.c
-uint8_t list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers);
-uint8_t list_remove(struct peer* list, int peer, int* tot_peers);
+int list_add(struct peer* list, struct sockaddr_in peer, int tot_peers);
+int list_remove(struct peer* list, int peer, int tot_peers);
 void shortcut(struct peer* list, int tot_peers);
 
 //ds_udp_conn.c
 void ds_boot(int sd, struct peer* list, int* tot_peers);
-void neighbors_update(int sd, const struct peer* list);
+void neighbors_update(int sd, struct peer* list);
+void quit(int sd, struct peer* list);

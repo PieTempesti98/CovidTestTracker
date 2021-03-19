@@ -30,7 +30,12 @@ int main(int argc, char* argv[]){
     else {
         //Lancio dell'interfaccia di interazione
         while (gui(list, &tot_peers)) {}
+        /* Quando esco dal while e' stato invocato il comando ESC: Termino il processo figlio (comunicazioni UDP),
+         * invio i segnali di quit e chiudo il socket */
+        kill(pid, 2);
+        quit(udp_socket, list);
         close(udp_socket);
+
     }
     exit(0);
 }

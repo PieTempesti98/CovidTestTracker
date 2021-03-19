@@ -3,3 +3,7 @@ CMakeLists.txt
 .idea
 ds
 peer
+discoveryServer.o
+ds_gui_routines.o
+ds_udp_conn.o
+list_utility.o

@@ -1,6 +1,6 @@
 #include "ds_headers.h"
 
-uint8_t list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers){
+int list_add(struct peer* list, struct sockaddr_in peer, int tot_peers){
     struct peer new, *p, *n;
 
     new.addr = peer;
@@ -25,7 +25,7 @@ uint8_t list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers){
                 n = n->next;
             }
             if(ntohs(p->addr.sin_port) == ntohs(peer.sin_port))// il peer e' gia' in lista
-                return 0;
+                return tot_peers;
             new.next = p->next;
             new.pos = p->pos + 1;
             p->dirty = 1;
@@ -41,12 +41,12 @@ uint8_t list_add(struct peer* list, struct sockaddr_in peer, int* tot_peers){
         }
 
     }
-    *tot_peers ++;
-    shortcut(list, *tot_peers);
-    return 1;
+    tot_peers ++;
+    shortcut(list, tot_peers);
+    return tot_peers;
 }
 
-uint8_t list_remove(struct peer* list, int peer, int* tot_peers){
+int list_remove(struct peer* list, int peer, int tot_peers){
     uint8_t result = 0;
     struct peer *p = list, *q = p->next;
     if(ntohs(list->addr.sin_port) == peer){        //rimuovo il peer in testa
@@ -70,17 +70,19 @@ uint8_t list_remove(struct peer* list, int peer, int* tot_peers){
         q = q->next;
     }
     if(result == 0) //nessun peer rimosso
-        return result;
-    *tot_peers --;
-    shortcut(list, *tot_peers); //calcolo nuovi shortcut
-    return result;
+        return tot_peers;
+    tot_peers --;
+    shortcut(list, tot_peers); //calcolo nuovi shortcut
+    return tot_peers;
 }
 
 void shortcut(struct peer* list, int tot_peer){
-    double db_peers = (double)tot_peer;
-    int offset = (int)round(db_peers/2);
+    int offset;
     struct peer* p, *q;
-
+    if(tot_peer%2 == 0)
+        offset = tot_peer/2;
+    else
+        offset = tot_peer/2 + 1;
     p = list;
     while(p != NULL){
         int new_shortcut = (p->pos + offset)%tot_peer;
