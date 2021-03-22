@@ -21,6 +21,7 @@ int main(int argc, char* argv[]){
         perror("Bind error: ");
         exit(1);
     }
+
     pid = fork();
 
     if(pid == 0){
