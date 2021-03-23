@@ -23,16 +23,18 @@ struct peer* list_add(struct peer* list, struct sockaddr_in peer, int tot_peers)
             list = new;
         }
         else{
-            while (p->next != NULL && ntohs(p->addr.sin_port) > ntohs(peer.sin_port)) {
-                if(ntohs(p->addr.sin_port) == ntohs(peer.sin_port)){
+            n = p->next;
+            while (p->next != NULL && ntohs(n->addr.sin_port) < ntohs(peer.sin_port)) {
+                if(ntohs(n->addr.sin_port) == ntohs(peer.sin_port)){
                     // il peer e' gia' in lista
                     return list;
                 }
 
                 p = p->next;
-                n = n->next;
+                n = p->next;
             }
-            new->next = p->next;
+            p->next = new;
+            new->next = n;
             new->pos = p->pos + 1;
             p->dirty = 1;
             p->next = new;
@@ -51,49 +53,73 @@ struct peer* list_add(struct peer* list, struct sockaddr_in peer, int tot_peers)
 }
 
 struct peer* list_remove(struct peer* list, int peer, int tot_peers){
-    uint8_t result = 0;
-    struct peer *p = list, *q = p->next;
-    if(ntohs(list->addr.sin_port) == peer){//rimuovo il peer in testa
+    int result = 0;
+    struct peer *p = list;
+    struct peer* q;
+
+    //Se qualche peer ha come shortcut il peer che rimuovo vado a dereferenziare il puntatore
+    while(p != NULL){
+        q = p->shortcut;
+        if(q != NULL) {
+            if (ntohs(q->addr.sin_port) == peer){
+                p->shortcut = NULL;
+            }
+        }
+        p = p->next;
+    }
+    p = list;
+    if(ntohs(list->addr.sin_port) == peer){
+        //rimuovo il peer in testa
         list = list->next;
         free(p);
-        q = list;
+        if(list != NULL)
+            list->pos --;
+        p = list;
+        result = 1;
     }
-    else {
-        while (p->next != NULL && ntohs(q->addr.sin_port) == peer) { //scorro la lista per cercare il peer da rimuovere
-            p = q;
+    else if(p->next != NULL) {
+        q = p->next;
+        printf("scorro la lista\n");
+        while (q->next != NULL && ntohs(q->addr.sin_port) != peer) {
+            //scorro la lista per cercare il peer da rimuovere
+            p = p->next;
             q = q->next;
         }
-        //rimuovo il peer e correggo i neighbors
-        p->next = q->next;
-        free(q);
-        p->dirty = 1;
-        result = 1;
-        q = p->next;
-    }
-    //aggiornamento della posizione per i peer successivi in lista a quello rimosso
-    while(q->next != NULL){
-        q->pos --;
-        q = q->next;
+        if(ntohs(q->addr.sin_port) == peer) {
+            //rimuovo il peer e correggo i neighbors
+            p->next = q->next;
+            free(q);
+            p->dirty = 1;
+            result = 1;
+        }
     }
     if(result == 0) //nessun peer rimosso
         return list;
+    //aggiornamento della posizione per i peer successivi in lista a quello rimosso e del totale dei peer
     tot_peers --;
-    return shortcut(list, tot_peers); //calcolo nuovi shortcut
+    if(tot_peers > 0)
+        while(p->next != NULL){
+            p = p->next;
+            p->pos --;
+        }
+    //calcolo nuovi shortcut
+    return shortcut(list, tot_peers);
 }
 
 struct peer* shortcut(struct peer* list, int tot_peer){
     int offset;
     struct peer* p, *q;
-
-    printf("Calcolo gli shortcut\n");
+    //Calcolo la distanza tra il peer e lo shortcut solo se ho piu' di due peer connessi
+    //Con due peer o meno non uso gli shortcut
     if(tot_peer > 2) {
         if (tot_peer % 2 == 0)
             offset = tot_peer / 2;
         else
             offset = tot_peer / 2 + 1;
-        printf("L'offset e' %d\n", offset);
         p = list;
         while (p != NULL) {
+            //Calcolo la posizine del nuovo shortcut: se e' diversa dalla osizione dello shortcut attualmente puntato
+            //allora aggiorno il puntatore allo shortcut corretto
             int new_shortcut = (p->pos + offset) % tot_peer;
             q = p->shortcut;
             if (q == NULL || q->pos != new_shortcut) {
@@ -112,6 +138,13 @@ struct peer* shortcut(struct peer* list, int tot_peer){
             p = p->next;
         }
     }
-    printf("Il bit dirty del primo elemento in lista e' %d\n", list->dirty);
+    p = list;
+    //Setto i bit dirty ad 1 nel caso in cui sia stato rimosso lo shortcut e/o sia cambiato il peer in testa alla lista,
+    //in modo che sia aggiornato il next del peer in coda
+    while(p != NULL){
+        if(p->next == NULL || p->shortcut == NULL)
+            p->dirty = 1;
+        p = p->next;
+    }
     return list;
 }

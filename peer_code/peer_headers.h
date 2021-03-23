@@ -1,11 +1,12 @@
 #include "../headers.h"
 
-void gui(int udp_socket, int porta);
+//peer_udp_conn.c
+void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockaddr_in neighbors[2]);
+void stop(int sd, struct sockaddr_in ds_addr);
+int udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in neighbors[2]);
 
-int start(int udp_socket, struct sockaddr_in ds_addr, int porta);
-
+//peer_gui_routines.c
 void add(char type, int quantity);
-
 void get(char* aggr, char type, int quantity);
 
-void udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in* neighbors);
+

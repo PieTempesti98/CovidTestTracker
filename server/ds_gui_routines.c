@@ -22,13 +22,14 @@ void showhelp(){
 
 void showneighbor(struct peer* list, int peer){
     struct peer* p;
+    int presente = 0;
     if(list == NULL){
         printf("Al momento non ci sono peer connessi.\n");
         return;
     }
     p = list;
     while(p != NULL){
-        if(ntohs(p->addr.sin_port) == peer){
+        if(ntohs(p->addr.sin_port) == peer || peer == 0){
             struct peer* shortcut; struct peer* next;
             shortcut = p->shortcut;
             next = p->next;
@@ -41,23 +42,18 @@ void showneighbor(struct peer* list, int peer){
                 printf("1. %d\n", ntohs(next->addr.sin_port));
             else
                 printf("Il peer indicato al momento non ha neighbors\n");
-            return;
+            presente = 1;
         }
         p = p->next;
     }
-    printf("Il peer indicato non e' connesso al ds\n");
+    if(presente == 0)
+        printf("Il peer indicato non e' connesso al ds\n");
 }
 
-int gui(struct peer* list, const int *tot_peers){
-    char input[20];
-
-    printf("Digita un comando:\n\n"
-           "1. help --> Mostra i dettagli dei comandi\n"
-           "2. showpeers --> Mostra un elenco dei peer connessi\n"
-           "3. showneighbor <peer> --> Mostra i neighbor del peer specificato\n"
-           "4. esc --> Chiudi il DS\n\n"
-    );
-    scanf("%s", input);
+int gui(struct peer* list){
+    char input[13];
+    int* peer = NULL;
+    scanf("%s %d", input, peer);
     if(strcmp(input, "esc") == 0)
         return 0;
     if(strcmp(input, "showpeers") == 0)
@@ -65,9 +61,9 @@ int gui(struct peer* list, const int *tot_peers){
     else if(strcmp(input, "help") == 0)
         showhelp();
     else if(strcmp(input, "showneighbor") == 0){
-        int peer;
-        scanf("%d",&peer);
-        showneighbor(list, peer);
+        if(peer == NULL)
+            peer = 0;
+        showneighbor(list, *peer);
     }
 
     return 1;

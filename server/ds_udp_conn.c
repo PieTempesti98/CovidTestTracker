@@ -1,60 +1,61 @@
 #include"ds_headers.h"
 
-void ds_boot(int sd, struct peer* list, int* tot_peers){
+struct peer* ds_boot(int sd, struct peer* list, int* tot_peers) {
     int ret;
     unsigned int rcv_msg;
     int result;
     char buffer[MSG_STD_LEN];
     struct sockaddr_in peer_addr;
     unsigned int addr_size = sizeof(peer_addr);
-
-    while(1){
-        ret = recvfrom(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr*)&peer_addr, &addr_size);
-        if(ret < 0){
+    struct peer* p;
+        ret = recvfrom(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr *) &peer_addr, &addr_size);
+        if (ret < 0) {
             printf("C'e' stato un errore/n");
             perror("Errore in ricezione sul socket UDP: ");
-            if(errno == EBADF){ //Il socket UDP e' stato chiuso
-                break;
-            }
         }
         printf("-SISTEMA- Ricevuto il messaggio %s dal peer sulla porta %u \n", buffer, htons(peer_addr.sin_port));
 
-        if(strcmp(buffer, "STOP") == 0){ //Il peer viene chiuso, devo aggiornare lista e neighbors
+        if (strcmp(buffer, "STOP") == 0) { //Il peer viene chiuso, devo aggiornare lista e neighbors
             list = list_remove(list, ntohs(peer_addr.sin_port), *tot_peers); //rimuovo il peer dalla lista, se presente
             /*
-             * Assumo che richieste di quit di peer non presenti nella lista siano dovute a perdita dell'ack,
-             * quindi provvedero' ad iviarlo ogni volta che arriva una richiesta di quit; solo quando si verifica
-             * effettivamente la rimozione di un peer provvedo all'aggiornamento dei neighbors*/
-            ret = sendto(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
-            if(ret < 0)
-               perror("Errore in invio sul socket UDP: ");
-            if(result != *tot_peers){
+            * Assumo che richieste di quit di peer non presenti nella lista siano dovute a perdita dell'ack,
+            * quindi provvedero' ad iviarlo ogni volta che arriva una richiesta di quit; solo quando si verifica
+            * effettivamente la rimozione di un peer provvedo all'aggiornamento dei neighbors*/
+            ret = sendto(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr *) &peer_addr, sizeof(peer_addr));
+            if (ret < 0)
+                perror("Errore in invio sul socket UDP: ");
+            p = list;
+            result = 0;
+            while (p != NULL) {
+                result++;
+                p = p->next;
+            }
+            if (result != *tot_peers) {
                 *tot_peers = result;
                 printf("-SISTEMA- Peer %d rimosso dalla lista dei peer attivi\n", ntohs(peer_addr.sin_port));
                 neighbors_update(sd, &list);
             }
         }
         //il peer ha richiesto il boot, quindi lo aggiungo alla lista e sistemo i neighbors
-        sscanf(buffer,"%u", &rcv_msg);
-        if(rcv_msg == ntohs(peer_addr.sin_port)){
-            struct peer* p;
+        sscanf(buffer, "%u", &rcv_msg);
+        if (rcv_msg == ntohs(peer_addr.sin_port)) {
             list = list_add(list, peer_addr, *tot_peers);
             p = list;
             result = 0;
-            while(p != NULL){
+            while (p != NULL) {
                 result++;
                 p = p->next;
             }
-            if(result != *tot_peers) {
+            if (result != *tot_peers) {
                 *tot_peers = result;
                 /* tratto il nuovo peer come un peer a cui ho aggiornato i neighbors, quindi invio la sua lista mentre
-                 * invio tutte le liste aggiornate */
+                * invio tutte le liste aggiornate */
                 printf("-SISTEMA- Effettuato il boot del peer %d \n", ntohs(peer_addr.sin_port));
-                if(list != NULL)
-                neighbors_update(sd, &list);
+                if (list != NULL)
+                    neighbors_update(sd, &list);
             }
         }
-    }
+        return list;
 }
 
 void neighbors_update(int sd, struct peer** list){
@@ -96,7 +97,7 @@ void neighbors_update(int sd, struct peer** list){
                 ip1 = n1->addr.sin_addr.s_addr;
                 port1 = n1->addr.sin_port;
             }
-            if(n2 == NULL){//Se non ho neighbor passo IP e porta pari a 0 come convenzione
+            if(n2 == NULL || (n2 != NULL && (n1 != NULL && n1->addr.sin_port == n2->addr.sin_port))){//Se non ho neighbor passo IP e porta pari a 0 come convenzione
                 ip2 = 0;
                 port2 = 0;
             }
@@ -112,12 +113,12 @@ void neighbors_update(int sd, struct peer** list){
             do {
                 if(ret == 0) {
                     //aggiungo nell lista di lettura il socket
-                    timeout.tv_sec = 1;
+                    timeout.tv_sec = 3;
                     timeout.tv_usec = 0;
                     FD_ZERO(&read_fds);
                     FD_SET(sd, &read_fds);
                     printf("-SISTEMA- Invio il messaggio %s al peer sulla porta %d\n", buffer, ntohs(peer_addr.sin_port));
-                    ret = sendto(sd, buffer, buf_size, 0, (struct sockaddr *) &peer_addr, addr_size);
+                    ret = sendto(sd, buffer, buf_size, 0, (struct sockaddr *) &p->addr, addr_size);
                     if (ret < 0)
                         perror("Errore di invio dei neighbors: ");
                 } else if (ret == 1){
@@ -149,16 +150,17 @@ void quit(int sd, struct peer* list){
     int ret, ack;
    struct timeval timeout;
    //timeout per l'ack di quit
-   timeout.tv_sec = 1;
-   timeout.tv_usec = 0;
 
     while(list != NULL){
         struct peer* p = list;
         list = list->next; //svuoto la lista
         ack = 0;
         do{ //invio il segnale di quit al peer p e mi metto in attesa della risposta
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
             FD_ZERO(&read_fds);
             FD_SET(sd, &read_fds);
+            printf("-SISTEMA- Invio comando di spengimento al peer %u\n", ntohs(p->addr.sin_port));
             ret = sendto(sd, msg, strlen(msg) + 1,0, (struct sockaddr*)&p->addr, sizeof(p->addr));
             if(ret < 0)
                 perror("Errore invio comando di spengimento: ");
@@ -173,8 +175,12 @@ void quit(int sd, struct peer* list){
                 if(ret < 0)
                     perror("Errore ricezione ack di spengimento: ");
                 //controllo di aver ricevuto l'ack dal mittente corretto, se si chiudo il ciclo
-                if(strcmp(echo, msg) == 0 && ntohs(recv_addr.sin_port) == ntohs(p->addr.sin_port))
+                if(strcmp(echo, msg) == 0 && ntohs(recv_addr.sin_port) == ntohs(p->addr.sin_port)){
+                    printf("-SISTEMA- Ricevuto ack di spengimento dal peer %u\n", ntohs(p->addr.sin_port));
                     ack = 1;
+                    free(p);
+                }
+
             }
         }while(ack == 0);
     }
