@@ -19,6 +19,13 @@ int udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in neighbors[2]
             perror("Errore di comunicazione col DS: ");
         return 0;
     }
+    if (strcmp(buffer, "ENDD") == 0){
+        //Messaggio di chiusura delle entries del giorno: invio l'ack e aggiorno il register
+        ret = sendto(sd, buffer, sizeof(buffer), 0, (struct sockaddr*)&ds_addr, addr_size);
+        if (ret < 0)
+            perror("Errore di comunicazione col DS: ");
+        return 2;
+    }
     else {
         //Messaggio di aggiornamento neighbors: invio l'ack di ricezione e li aggiorno selo se sono diversi
         sscanf(buffer, "%lu:%u %lu:%u", &n1_ip, &n1_port, &n2_ip, &n2_port);

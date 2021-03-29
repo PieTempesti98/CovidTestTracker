@@ -9,6 +9,10 @@ int main(int argc, char* argv[]){
     struct sockaddr_in ds_addr;
     fd_set master;
     int esc = 1;
+    pthread_t clock_thread;
+    pthread_mutex_t list_mutex;
+    struct param thread_params;
+    pthread_mutex_t* lm_pointer = &list_mutex;
 
     list = NULL;
     printf("******************* DS COVID STARTED *******************\n");
@@ -26,6 +30,20 @@ int main(int argc, char* argv[]){
         perror("Bind error: ");
         exit(1);
     }
+
+    //Creo il thread per la gestione dell'ora: alle 18 invia a tutti i peer il messaggio ENDD che fa salvare su file
+    // le entries del giorno
+    ret = pthread_mutex_init(&list_mutex, NULL);
+
+    thread_params.list = &list;
+    thread_params.list_mutex = &lm_pointer;
+    thread_params.sd = udp_socket;
+
+    ret = pthread_create(&clock_thread, NULL, (void*)end_day, &thread_params);
+    if(ret != 0) {
+        perror("Errore creazione thread di supporto: ");
+        exit(1);
+    }
     //Lancio dell'interfaccia di interazione
     while (esc){
         printf("Digita un comando:\n\n"
@@ -38,16 +56,24 @@ int main(int argc, char* argv[]){
         FD_SET(udp_socket, &master);
         FD_SET(STDIN_FILENO, &master);
         ret = select(udp_socket + 1, &master, NULL, NULL, NULL);
+
         if(ret < 0)
             perror("Errore in attesa: ");
-        if(FD_ISSET(udp_socket, &master))
-            list = ds_boot(udp_socket, list, &tot_peers);
-        if(FD_ISSET(STDIN_FILENO, &master))
-            esc = gui(list);
+        if(FD_ISSET(udp_socket, &master)){
+            list = ds_boot(udp_socket, list, &tot_peers, &list_mutex);
+        }
+
+        if(FD_ISSET(STDIN_FILENO, &master)){
+                        esc = gui(list, &list_mutex);
+        }
+
+
     }
     /* Quando esco dal while e' stato invocato il comando ESC: Termino il processo figlio (comunicazioni UDP),
      * invio i segnali di quit e chiudo il socket */
+    pthread_mutex_lock(&list_mutex);
     quit(udp_socket, list);
+    pthread_mutex_unlock(&list_mutex);
     close(udp_socket);
     exit(0);
 }

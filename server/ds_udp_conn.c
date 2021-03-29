@@ -1,6 +1,6 @@
 #include"ds_headers.h"
 
-struct peer* ds_boot(int sd, struct peer* list, int* tot_peers) {
+struct peer* ds_boot(int sd, struct peer* list, int* tot_peers, pthread_mutex_t* list_mutex) {
     int ret;
     unsigned int rcv_msg;
     int result;
@@ -14,8 +14,8 @@ struct peer* ds_boot(int sd, struct peer* list, int* tot_peers) {
             perror("Errore in ricezione sul socket UDP: ");
         }
         printf("-SISTEMA- Ricevuto il messaggio %s dal peer sulla porta %u \n", buffer, htons(peer_addr.sin_port));
-
         if (strcmp(buffer, "STOP") == 0) { //Il peer viene chiuso, devo aggiornare lista e neighbors
+            pthread_mutex_lock(list_mutex);
             list = list_remove(list, ntohs(peer_addr.sin_port), *tot_peers); //rimuovo il peer dalla lista, se presente
             /*
             * Assumo che richieste di quit di peer non presenti nella lista siano dovute a perdita dell'ack,
@@ -35,10 +35,12 @@ struct peer* ds_boot(int sd, struct peer* list, int* tot_peers) {
                 printf("-SISTEMA- Peer %d rimosso dalla lista dei peer attivi\n", ntohs(peer_addr.sin_port));
                 neighbors_update(sd, &list);
             }
+            pthread_mutex_unlock(list_mutex);
         }
         //il peer ha richiesto il boot, quindi lo aggiungo alla lista e sistemo i neighbors
         sscanf(buffer, "%u", &rcv_msg);
         if (rcv_msg == ntohs(peer_addr.sin_port)) {
+            pthread_mutex_lock(list_mutex);
             list = list_add(list, peer_addr, *tot_peers);
             p = list;
             result = 0;
@@ -54,8 +56,10 @@ struct peer* ds_boot(int sd, struct peer* list, int* tot_peers) {
                 if (list != NULL)
                     neighbors_update(sd, &list);
             }
+            pthread_mutex_unlock(list_mutex);
         }
-        return list;
+    return list;
+
 }
 
 void neighbors_update(int sd, struct peer** list){
@@ -117,7 +121,7 @@ void neighbors_update(int sd, struct peer** list){
                     timeout.tv_usec = 0;
                     FD_ZERO(&read_fds);
                     FD_SET(sd, &read_fds);
-                    printf("-SISTEMA- Invio il messaggio %s al peer sulla porta %d\n", buffer, ntohs(peer_addr.sin_port));
+                    printf("-SISTEMA- Invio il messaggio %s al peer sulla porta %d\n", buffer, ntohs(p->addr.sin_port));
                     ret = sendto(sd, buffer, buf_size, 0, (struct sockaddr *) &p->addr, addr_size);
                     if (ret < 0)
                         perror("Errore di invio dei neighbors: ");
@@ -183,5 +187,69 @@ void quit(int sd, struct peer* list){
 
             }
         }while(ack == 0);
+    }
+}
+
+void end_day(struct param* param) {
+    time_t now_t = time(NULL); //time_t per risalire all'ora corrente
+    struct tm ref = *localtime(&now_t), now = *localtime(&now_t); //strutture tm per il confronto della data
+    char buffer[MSG_STD_LEN];
+    struct sockaddr_in peer_addr;
+    unsigned int peer_size = sizeof(peer_addr);
+    fd_set read_fd;
+    struct timeval timeout;
+    struct peer *p;
+    int ret;
+
+    ref.tm_hour = 18;
+    ref.tm_min = 0;
+    ref.tm_sec = 0;
+    if(now.tm_hour >= 18)//se accendo il DS dopo le 18 setto subito il ref al giorno successivo
+        ref.tm_mday ++;
+    while(1){
+        //finche' now non raggiunge le 18 continuo ad aggiornarlo
+        while (difftime(mktime(&ref), mktime(&now)) > 0) {
+            now_t = time(NULL);
+            now = *localtime(&now_t);
+        }
+        printf("ora di aggiornare i register: avverto i peer\n");
+        pthread_mutex_lock(*param->list_mutex); //metto il lock alla lista: devo inviare i messaggi ai vari peer
+        printf("lock del mutex settato\n");
+        p = *param->list;
+        ret = pthread_mutex_unlock(*param->list_mutex);//sblocco la lista
+        if(ret != 0)
+            perror("Errore di sblocco del mutex: ");
+        printf("Mutex sbloccato, posso continuare con le interazioni");
+        while (p != NULL) {
+            int ack = 0;
+            printf("ora di aggiornare i register: avverto i peer\n");
+            do {
+                timeout.tv_sec = 1;
+                timeout.tv_usec = 0;
+                FD_ZERO(&read_fd);
+                FD_SET(param->sd, &read_fd);
+                strcpy(buffer, "ENDD");
+                printf("-SISTEMA- Invio comando ENDD al peer %u\n", ntohs(p->addr.sin_port));
+                ret = sendto(param->sd, buffer, MSG_STD_LEN, 0, (struct sockaddr *) &p->addr, sizeof(p->addr));
+                if (ret < 0)
+                    perror("Errore invio comando di spengimento: ");
+                if (select(param->sd + 1, &read_fd, NULL, NULL, &timeout) == 1) {
+                    //Pronto a ricevere l'ack, prepro le variabili di ricezione);
+                    memset(&peer_addr, 0, peer_size);
+                    memset(buffer, 0, MSG_STD_LEN);
+                    ret = recvfrom(param->sd, buffer, MSG_STD_LEN, 0, (struct sockaddr *) &peer_addr, &peer_size);
+                    if (ret < 0)
+                        perror("Errore ricezione ack di spengimento: ");
+                    //controllo di aver ricevuto l'ack dal mittente corretto, se si chiudo il ciclo
+                    if (strcmp(buffer, "ENDD") == 0 && ntohs(peer_addr.sin_port) == ntohs(p->addr.sin_port)) {
+                        printf("-SISTEMA- Ricevuto ack ENDD dal peer %u\n", ntohs(p->addr.sin_port));
+                        ack = 1;
+                    }
+                }
+            } while (ack == 0);
+            p = p->next;
+        }
+        printf("Lista completamente scansionata \n");
+        ref.tm_mday++;//incremento ref al giorno successivo
     }
 }

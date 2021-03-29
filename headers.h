@@ -9,7 +9,9 @@
 #include<unistd.h>
 #include<errno.h>
 #include<math.h>
-#include <signal.h>
+#include<signal.h>
+#include<time.h>
+#include<pthread.h>
 
 // macro
 #define MSG_STD_LEN 5
