@@ -41,27 +41,8 @@ int main(int argc, char* argv[]){
     entries_initializer(today_entries);
 
     //all'inizio non ho valori gggregati calcolati: il puntatore punta a NULL
-
     aggr_list = NULL;
 
-    if(porta == 5000){
-        struct aggr prova;
-        time_t time1 = time(NULL);
-        struct tm data1 = *localtime(&time1), data2 = *localtime(&time1);
-        prova.value = (char*)malloc((sizeof(char)*7)*2);
-        sprintf(prova.value, "%d %d", 23, 32);
-        prova.aggr_type = 'V';
-        prova.type = 'T';
-        data1.tm_hour = data1.tm_min = data1.tm_sec = data2.tm_hour = data2.tm_min = data2.tm_sec = 0;
-        data1.tm_mon = data2.tm_mon = 2;
-        data1.tm_year = data2.tm_year = 121;
-        data1.tm_mday = 25;
-        data2.tm_mday = 27;
-        prova.d1 = data1;
-        prova.d2 = data2;
-        prova.next = NULL;
-        aggr_list = &prova;
-    }
     while(1){
         int max_socket;
         printf("Digita un comando:\n");
@@ -86,7 +67,7 @@ int main(int argc, char* argv[]){
             unsigned int addr_size = sizeof(struct sockaddr_in);
             tcp_addr = (struct sockaddr_in*)malloc(addr_size);
             data_socket = accept(conn_socket,(struct sockaddr*)tcp_addr, &addr_size);
-            tcp_conn(data_socket, *tcp_addr, today_entries, &aggr_list, porta);
+            tcp_conn(data_socket, *tcp_addr, today_entries, &aggr_list, porta, neighbors);
         }
         if(FD_ISSET(udp_socket, &master)) {
             //Il DS ha inviato comunicazioni
@@ -157,7 +138,6 @@ int main(int argc, char* argv[]){
                     strcpy(period, elab);
                 }
                 get(aggr, type, period, &aggr_list, neighbors, porta);
-
             }
         }
     }

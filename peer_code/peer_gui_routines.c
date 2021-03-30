@@ -18,7 +18,6 @@ void get(char aggr, char type, char* period, struct aggr** aggregates, struct so
     struct tm data1 = *localtime(&t), data2 = *localtime(&t);
     struct aggr* p;
     int diff_offset, offset1, offset2;
-    float f_offset1, f_offset2;
 
     if((aggr == 'T' || aggr == 'V') && (type == 'T' || type == 'N')) {
         elab = strtok(period, "-");
@@ -46,24 +45,14 @@ void get(char aggr, char type, char* period, struct aggr** aggregates, struct so
         data1.tm_hour = data1.tm_min = data1.tm_sec = data2.tm_hour = data2.tm_min = data2.tm_sec = 0;
         data1.tm_mday ++; data2.tm_mday ++;
         //calcolo la differenza in giorni tra le due date indicate (dati da prelevare dall'array di dati aggregati
-        diff_offset = (int)difftime(mktime(&data2), mktime(&data1))/(60 * 60 * 24);
+        diff_offset = date_offset(data2, data1);
         if(aggr == 'T')//le variazioni sono una in meno dei giorni di offset
             diff_offset ++;
         //cerco se ho gia' il dato calcolato
         p = *aggregates;
         while(p != NULL){
-            f_offset1 = difftime(mktime(&data1), mktime(&p->d1))/(60*60*24);
-            f_offset2 = difftime(mktime(&data2), mktime(&p->d2))/(60 * 60 * 24);
-            offset1 = (int)difftime(mktime(&data1), mktime(&p->d1))/(60*60*24);
-            offset2 = (int)difftime(mktime(&data2), mktime(&p->d2))/(60 * 60 * 24);
-            if((float)offset1 - f_offset1 < -0.5)
-                offset1 ++;
-            if((float)offset1 - f_offset1 > 0.5)
-                offset1 --;
-            if((float)offset2 - f_offset2 < -0.5)
-                offset2 ++;
-            if((float)offset2 - f_offset2 > 0.5)
-                offset2 --;
+            offset1 = date_offset(data1, p->d1);
+            offset2 = date_offset(data2, p->d2);
             if(p->type == type && p->aggr_type == aggr &&
             offset1 >= 0 && offset2 <= 0){
                 break;
@@ -250,6 +239,130 @@ void get(char aggr, char type, char* period, struct aggr** aggregates, struct so
                 return;
             }
             //Nessuno dei miei neighbors ha i dati richiesti: procedo a fare il flooding
+            int sd1, sd2, ricevuti; //ricevuti: tiene il conto delle risposte dei neighbor
+            char* msg, disponibili[1024]; //stringa che contiene i neighbor a cui inviare la REQUEST_ENTRIES
+            fd_set master;
+
+            //creo i socket per inviare ai neighbor
+            sd1 = socket(AF_INET, SOCK_STREAM, 0);
+            sd2 = socket(AF_INET, SOCK_STREAM, 0);
+
+            ret = connect(sd1, (struct sockaddr*)&neighbors[0], sizeof(struct sockaddr_in));
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+            ret = connect(sd2, (struct sockaddr*)&neighbors[1], sizeof(struct sockaddr_in));
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+
+            //Preparo il messaggo da inviare ai neighbor
+            msg = (char*)malloc(sizeof(char)*36);//FFEN [peer] [T] [data1]-[data2], -> 36 caratteri max
+            memset(msg, 0, 36);
+            sprintf(msg, "FFEN %d %c %d:%d:%d-%d:%d:%d,", porta, type, data1.tm_mday, data1.tm_mon + 1, data1.tm_year + 1900, data2.tm_mday, data2.tm_mon + 1, data2.tm_year + 1900);
+            len = strlen(msg) + 1;
+            nlen = htons(len);
+
+            //invio a next
+            ret = send(sd1, (void*)&nlen, sizeof(uint16_t), 0);
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+            ret = send(sd1, (void*)msg, len, 0);
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+            printf("-SISTEMA- inviato il messaggio %s al peer %d\n", msg, ntohs(neighbors[0].sin_port));
+
+            //invio a shortcut
+            ret = send(sd2, (void*)&nlen, sizeof(uint16_t), 0);
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+            ret = send(sd2, (void*)msg, len, 0);
+            if(ret < 0)
+                perror("Errore di comunicazione TCP: ");
+            printf("-SISTEMA- inviato il messaggio %s al peer %d\n", msg, ntohs(neighbors[1].sin_port));
+            //metto i due socket nell'fd_set e mi metto in attesa delle risposte di entrambi
+            ricevuti = 0;
+            FD_ZERO(&master);
+            FD_SET(sd1, &master);
+            FD_SET(sd2, &master);
+            while(ricevuti < 2){
+                int max;
+                if(sd1 > sd2)
+                    max = sd1;
+                else
+                    max = sd2;
+
+                ret = select(max, &master, NULL, NULL, NULL);
+                if(ret < 0)
+                    perror("Errore di comunicazione TCP: ");
+                if(FD_ISSET(sd1, &master)){//Risposta di next
+                    //ricevo il messaggio
+                    ret = recv(sd1, (void*)&nlen, sizeof(uint16_t), 0);
+                    if(ret < 0)
+                        perror("Errore di comunicazione TCP: ");
+                    len = ntohs(nlen);
+                    free(msg);
+                    msg = (char*)malloc(sizeof(char)*len);
+                    ret = recv(sd1, (void*)msg, len, 0);
+                    if(ret < 0)
+                        perror("Errore di comunicazione TCP: ");
+                    printf("-SISTEMA- Ricevuto il messaggio %s dal peer %d\n", msg, ntohs(neighbors[0].sin_port));
+                    //levo l'intestazione
+                    elab = strtok(msg, ",");
+                    while(elab != NULL){
+                        int peer;
+                        char resp, s_peer[7];
+                        elab = strtok(NULL, " ");
+                        if(elab == NULL)
+                            break;
+                        sscanf(elab, "%d:%c", &peer, &resp);
+                        if(resp == 'Y'){
+                            sprintf(s_peer, "%d", peer);
+                            if(strstr(disponibili,s_peer) == NULL){//il peer non e' presente in lista
+                                strcat(s_peer, " ");
+                                strcat(disponibili, s_peer);
+                            }
+                        }
+                    }
+                    FD_ZERO(&master);
+                    ricevuti ++;
+                    if(ricevuti  < 2)//se non ho ancora tutti i dati mi rimetto in attesa dell'alro neighbor
+                        FD_SET(sd2, &master);
+                }
+                if(FD_ISSET(sd2, &master)){
+                    //messaggio in arrivo dallo shortcut: lo ricevo e mi salvo i peer con dati
+                    ret = recv(sd2, (void*)&nlen, sizeof(uint16_t), 0);
+                    if(ret < 0)
+                        perror("Errore di comunicazione TCP: ");
+                    len = ntohs(nlen);
+                    free(msg);
+                    msg = (char*)malloc(sizeof(char)*len);
+                    ret = recv(sd2, (void*)msg, len, 0);
+                    if(ret < 0)
+                        perror("Errore di comunicazione TCP: ");
+                    printf("-SISTEMA- Ricevuto il messaggio %s dal peer %d\n", msg, ntohs(neighbors[1].sin_port));
+                    elab = strtok(msg, ",");//arrivo al token dopo la virgola: parte dati
+                    while(elab != NULL){
+                        int peer;
+                        char resp, s_peer[7];//resp: responso del flooding, s_peer: versione in stringa del peer
+                        elab = strtok(NULL, " ");
+                        if(elab == NULL)
+                            break;
+                        sscanf(elab, "%d:%c", &peer, &resp);//faccio il parsing delle informazioni del peer
+                        if(resp == 'Y'){
+                            sprintf(s_peer, "%d", peer);
+                            if(strstr(disponibili,s_peer) == NULL){//il peer non e' presente in lista
+                                strcat(s_peer, " ");
+                                strcat(disponibili, s_peer);
+                            }
+                        }
+                    }
+                    FD_ZERO(&master);
+                    ricevuti ++;
+                    if(ricevuti  < 2)//se non ho ancora ricevuto tutti i dati mi rimetto in attesa dell'altro neighbor
+                        FD_SET(sd1, &master);
+                }
+
+            }
+            printf("Peer con dati disponibili: %s\n", disponibili);
         }
     }else
         printf("I parametri inseriti non sono corretti\n");

@@ -1,11 +1,11 @@
 #include"peer_headers.h"
 
-void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries[2], struct aggr** aggregates, int porta){
+void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries[2], struct aggr** aggregates, int porta, struct sockaddr_in neighbors[2]){
     char* buffer;
     int ret, buf_size;
     uint16_t msg_size;
     char* elab;
-
+    char* new_msg;
     ret = recv(data_socket, (void*) &msg_size,sizeof(uint16_t), 0 );
     if(ret < 0)
         perror("Errore in fase di ricezione TCP:");
@@ -17,6 +17,8 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
     if(ret < 0)
         perror("Errore in fase di ricezione TCP:");
     printf("Ricevuto il messaggio %s\n", buffer);
+    new_msg = (char*)malloc(sizeof(char)*(strlen(buffer) + 9));
+    strcpy(new_msg, buffer);
     elab = strtok(buffer, " "); //guardo il tipo di messaggio che ho ricevuto
 
     //messaggio di stop del peer che ha il peer attuale come next
@@ -39,7 +41,6 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
     //formato: REQD [peer] [aggr_type] [type] [data1-data2]
     if(strncmp(elab, "REQD", 4) == 0){
         int peer, offset1, offset2;
-        float f_offset1, f_offset2;
         char a, t;
         char* date_str;
         time_t tm = time(NULL);
@@ -78,18 +79,8 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
         //guardo se ho l'informazione richiesta
         p = *aggregates;
         while(p != NULL){
-            f_offset1 = difftime(mktime(&data1), mktime(&p->d1))/(60*60*24);
-            f_offset2 = difftime(mktime(&data2), mktime(&p->d2))/(60 * 60 * 24);
-            offset1 = (int)difftime(mktime(&data1), mktime(&p->d1))/(60*60*24);
-            offset2 = (int)difftime(mktime(&data2), mktime(&p->d2))/(60 * 60 * 24);
-            if((float)offset1 - f_offset1 < -0.5)
-                offset1 ++;
-            if((float)offset1 - f_offset1 > 0.5)
-                offset1 --;
-            if((float)offset2 - f_offset2 < -0.5)
-                offset2 ++;
-            if((float)offset2 - f_offset2 > 0.5)
-                offset2 --;
+            offset1 = date_offset(data1, p->d1);
+            offset2 = date_offset(data2, p->d2);
             if(p->type == t && p->aggr_type == a &&
                offset1 >= 0 && offset2 <= 0){
                 break;
@@ -111,7 +102,7 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
             //Calcolo l'offset tra il primo dato memorizzato nella struttura dati e quello che voglio calcolare
             int start_offset = offset1;
             //calcolo la differenza in giorni tra le due date indicate (dati da prelevare dall'array di dati aggregati)
-            int diff_offset = (int)difftime(mktime(&data2), mktime(&data1))/(60 * 60 * 24);
+            int diff_offset = date_offset(data2, data1);
 
             //Tiene il conto di quanti caratteri ho scorso nella stringa dei valori della struttura aggr
             int caratteri_scorsi = 0;
@@ -152,6 +143,92 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
         }
         free(date_str);
     }
+    if(strncmp(elab, "FFEN", 4) == 0) {
+        int peer, d1, m1, y1, d2, m2, y2, pid;
+        char t;
+        //allungo la stringa del buffer di 8 caratteri
+        time_t tm = time(NULL);
+        struct tm data1 = *localtime(&tm), data2 = *localtime(&tm);
+
+        strcpy(buffer, new_msg);
+        //faccio il parsing del messaggio ricevuto
+        sscanf(buffer, "FFEN %d %c %d:%d:%d-%d:%d:%d,", &peer, &t, &d1, &m1, &y1, &d2, &m2, &y2);
+        m1--;
+        m2--;
+        y1 -= 1900;
+        y2 -= 1900;
+        data1.tm_hour = data1.tm_min = data1.tm_sec = data2.tm_hour = data2.tm_min = data2.tm_sec = 0;
+        data1.tm_mday = d1;
+        data1.tm_mon = m1;
+        data1.tm_year = y1;
+        data2.tm_mday = d2;
+        data2.tm_mon = m2;
+        data2.tm_year = y2;
+        pid = fork();
+        if(pid == 0){//processo figlio: si occupa di gestire la richiesta
+            int result = look_for_entries(t, data1, data2, porta);
+            char str_to_add[9];
+            sprintf(str_to_add, "%d:", porta);
+            if(result == 1)
+                strcat(str_to_add, "Y ");
+            else
+                strcat(str_to_add, "N ");
+            strcat(new_msg, str_to_add);
+            if(
+                 (//Prima risposta inserita ed il mio shortcut e' il richiedente: contnuo
+                    (strlen(new_msg) + 1 < 43 && peer == ntohs(neighbors[1].sin_port))
+                    || peer != ntohs(neighbors[1].sin_port))//shortcut non e' il richiedente: continuo
+                  &&  peer != ntohs(neighbors[0].sin_port)){//next non e' il richiedene: continuo il flooding
+
+                //Il flooding non e' completo: invio a next e aspetto il ritorno del messaggio per farlo tornare indietro
+                int sd;
+                int len = strlen(new_msg) + 1;
+                uint16_t nlen = htons(len);
+
+                sd = socket(AF_INET, SOCK_STREAM, 0);
+                ret = connect(sd, (struct sockaddr*)&neighbors[0], sizeof(struct sockaddr_in));
+                if(ret < 0)
+                    perror("Errore in connessione TCP: ");
+
+                ret = send(sd, (void*)&nlen, sizeof(uint16_t), 0);
+                if(ret < 0)
+                    perror("Errore in trasmissione TCP: ");
+                ret = send(sd, (void*) new_msg, len, 0);
+                if(ret < 0)
+                    perror("Errore in trasmissione TCP: ");
+                printf("-SISTEMA- inviato il messaggio %s al peer %d\n", new_msg, ntohs(neighbors[0].sin_port));
+
+                ret = recv(sd, (void*)&nlen, sizeof(uint16_t), 0);
+                if(ret < 0)
+                    perror("Errore in trasmissione TCP: ");
+                len = ntohs(nlen);
+                free(new_msg);
+                new_msg = (char*)malloc(sizeof(char)* len);
+                ret = recv(sd, (void*)new_msg, len, 0);
+                if(ret < 0)
+                    perror("Errore in trasmissione TCP: ");
+                printf("-SISTEMA- Ricevuto il messaggio %s al peer %d\n", new_msg, ntohs(neighbors[0].sin_port));
+                close(sd);
+            }
+            //Rimando indiero il messaggio (mi e' arrivato il messaggio di ritorno o il flooding si e'concluso)
+            int len = strlen(new_msg) + 1;
+            uint16_t nlen = htons(len);
+            ret = send(data_socket, (void*)&nlen, sizeof(uint16_t), 0);
+            if(ret < 0)
+                perror("Errore in trasmissione TCP: ");
+            ret = send(data_socket, (void*) new_msg, len, 0);
+            if(ret < 0)
+                perror("Errore in trasmissione TCP: ");
+            printf("-SISTEMA- inviato il messaggio %s al peer %d\n", new_msg, peer);
+            close(data_socket);
+            free(buffer);
+            free(new_msg);
+
+            exit(0);
+        }
+    }
+    close(data_socket);
+    free(new_msg);
     free(buffer);
     return;
 }
@@ -184,4 +261,6 @@ void send_entries(int peer, struct sockaddr_in next_addr, struct entry entries[2
     close(sd);
     return;
 }
+
+
 

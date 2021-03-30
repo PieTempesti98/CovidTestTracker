@@ -26,7 +26,9 @@ void get(char aggr, char type, char* period, struct aggr** aggregates, struct so
 //peer_utilities.c
 void entries_initializer(struct entry entries[2]);
 void append_entries(struct entry entries[2], int porta);
+int date_offset(struct tm data1, struct tm data2);
+int look_for_entries(char type, struct tm data1, struct tm data2, int peer);
 
 //peer_tcp_conn.c
-void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries[2], struct aggr** aggregates, int porta);
+void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries[2], struct aggr** aggregates, int porta, struct sockaddr_in neighbors[2]);
 void send_entries(int peer, struct sockaddr_in next_addr, struct entry entries[2]);
