@@ -12,6 +12,7 @@
 #include<signal.h>
 #include<time.h>
 #include<pthread.h>
+#include<sys/wait.h>
 
 // macro
 #define MSG_STD_LEN 5

@@ -7,15 +7,20 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
     char* elab;
     char* new_msg;
     ret = recv(data_socket, (void*) &msg_size,sizeof(uint16_t), 0 );
-    if(ret < 0)
-        perror("Errore in fase di ricezione TCP:");
+    if(ret < 0){
+        perror("Errore in trasmissione TCP: ");
+        return;
+    }
     buf_size = ntohs(msg_size);
 
     buffer = (char*)malloc(sizeof(char)*buf_size);
 
     ret = recv(data_socket, (void*) buffer,buf_size, 0 );
-    if(ret < 0)
-        perror("Errore in fase di ricezione TCP:");
+    if(ret < 0){
+        perror("Errore in trasmissione TCP: ");
+        free(buffer);
+        return;
+    }
     printf("Ricevuto il messaggio %s\n", buffer);
     new_msg = (char*)malloc(sizeof(char)*(strlen(buffer) + 9));
     strcpy(new_msg, buffer);
@@ -67,14 +72,12 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
         sscanf(elab, "%d:%d:%d", &data1.tm_mday, &m, &an);
         data1.tm_mon = m - 1;
         data1.tm_year = an - 1900;
-        data1.tm_mday ++;
 
 
         elab = strtok(NULL, " \n");
         sscanf(elab, "%d:%d:%d", &data2.tm_mday, &m, &an);
         data2.tm_mon = m - 1;
         data2.tm_year = an - 1900;
-        data2.tm_mday ++;
 
         //guardo se ho l'informazione richiesta
         p = *aggregates;
@@ -92,11 +95,21 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
             int len = strlen(msg) + 1;
             uint16_t nlen = htons(len);
             ret = send(data_socket, (void*)&nlen, sizeof(uint16_t), 0);
-            if(ret < 0)
-                perror("Errore di comunicazione TCP: ");
+            if(ret < 0){
+                perror("Errore in trasmissione TCP: ");
+                free(buffer);
+                free(new_msg);
+                free(date_str);
+                return;
+            }
             ret = send(data_socket, (void*)msg, len, 0);
-            if(ret < 0)
-                perror("Errore di comunicazione TCP: ");
+                if(ret < 0){
+                    perror("Errore in trasmissione TCP: ");
+                    free(buffer);
+                    free(new_msg);
+                    free(date_str);
+                    return;
+                }
             printf("-SISTEMA- Inviato il messaggio %s al peer %d\n", msg, peer);
         }else{//ho l'informazione richiesta: invio il vettore di dati richiesto
             //Calcolo l'offset tra il primo dato memorizzato nella struttura dati e quello che voglio calcolare
@@ -134,11 +147,21 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
             int len = strlen(buffer) + 1;
             uint16_t nlen = htons(len);
             ret = send(data_socket, (void*)&nlen, sizeof(uint16_t), 0);
-            if(ret < 0)
-                perror("Errore di comunicazione TCP: ");
+            if(ret < 0){
+                perror("Errore in trasmissione TCP: ");
+                free(buffer);
+                free(new_msg);
+                free(date_str);
+                return;
+            }
             ret = send(data_socket, (void*)buffer, len, 0);
-            if(ret < 0)
-                perror("Errore di comunicazione TCP: ");
+            if(ret < 0){
+                perror("Errore in trasmissione TCP: ");
+                free(buffer);
+                free(new_msg);
+                free(date_str);
+                return;
+            }
             printf("-SISTEMA- Inviato il messaggio %s al peer %d\n", buffer, peer);
         }
         free(date_str);
@@ -187,43 +210,123 @@ void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries
 
                 sd = socket(AF_INET, SOCK_STREAM, 0);
                 ret = connect(sd, (struct sockaddr*)&neighbors[0], sizeof(struct sockaddr_in));
-                if(ret < 0)
-                    perror("Errore in connessione TCP: ");
+                if(ret < 0){
+                    perror("Errore in trasmissione TCP: ");
+                    free(buffer);
+                    free(new_msg);
+                    exit(1);
+                }
 
                 ret = send(sd, (void*)&nlen, sizeof(uint16_t), 0);
-                if(ret < 0)
+                if(ret < 0){
                     perror("Errore in trasmissione TCP: ");
+                    free(buffer);
+                    free(new_msg);
+                    exit(1);
+                }
                 ret = send(sd, (void*) new_msg, len, 0);
-                if(ret < 0)
+                if(ret < 0){
                     perror("Errore in trasmissione TCP: ");
+                    free(buffer);
+                    free(new_msg);
+                    exit(1);
+                }
                 printf("-SISTEMA- inviato il messaggio %s al peer %d\n", new_msg, ntohs(neighbors[0].sin_port));
 
                 ret = recv(sd, (void*)&nlen, sizeof(uint16_t), 0);
-                if(ret < 0)
+                if(ret < 0){
                     perror("Errore in trasmissione TCP: ");
+                    free(buffer);
+                    free(new_msg);
+                    exit(1);
+                }
                 len = ntohs(nlen);
                 free(new_msg);
                 new_msg = (char*)malloc(sizeof(char)* len);
                 ret = recv(sd, (void*)new_msg, len, 0);
-                if(ret < 0)
+                if(ret < 0){
                     perror("Errore in trasmissione TCP: ");
-                printf("-SISTEMA- Ricevuto il messaggio %s al peer %d\n", new_msg, ntohs(neighbors[0].sin_port));
+                    free(buffer);
+                    free(new_msg);
+                    exit(1);
+                }
+                printf("-SISTEMA- Ricevuto il messaggio %s dal peer %d\n", new_msg, ntohs(neighbors[0].sin_port));
                 close(sd);
             }
             //Rimando indiero il messaggio (mi e' arrivato il messaggio di ritorno o il flooding si e'concluso)
             int len = strlen(new_msg) + 1;
             uint16_t nlen = htons(len);
             ret = send(data_socket, (void*)&nlen, sizeof(uint16_t), 0);
-            if(ret < 0)
+            if(ret < 0){
                 perror("Errore in trasmissione TCP: ");
+                free(buffer);
+                free(new_msg);
+                exit(1);
+            }
             ret = send(data_socket, (void*) new_msg, len, 0);
-            if(ret < 0)
+            if(ret < 0){
                 perror("Errore in trasmissione TCP: ");
+                free(buffer);
+                free(new_msg);
+                exit(1);
+            }
+
             printf("-SISTEMA- inviato il messaggio %s al peer %d\n", new_msg, peer);
             close(data_socket);
             free(buffer);
             free(new_msg);
 
+            exit(0);
+        }
+    }
+    if(strncmp(elab, "REQE", 4) == 0){//REQUEST_ENTRIES
+        int peer, pid;
+        char t;
+        time_t tm = time(NULL);
+        struct tm data1 = *localtime(&tm), data2 = *localtime(&tm);
+        int day1, mon1, yr1;
+        data1.tm_hour = data1.tm_min = data1.tm_sec = data2.tm_hour = data2.tm_min = data2.tm_sec = 0;
+        strcpy(buffer, new_msg);
+        //faccio il parsing del messaggio ricevuto
+        elab = strtok(NULL, " ");
+        sscanf(elab, "%d", &peer);
+        elab = strtok(NULL, " ");
+        t = *elab;
+        elab = strtok(NULL, "-");
+        sscanf(elab, "%d:%d:%d",&day1, &mon1, &yr1);
+        data1.tm_mday = day1;
+        data1.tm_mon = mon1 -1;
+        data1.tm_year = yr1 - 1900;
+        elab = strtok(NULL, "- \n");
+        sscanf(elab, "%d:%d:%d",&day1, &mon1, &yr1);
+        data2.tm_mday = day1;
+        data2.tm_mon = mon1 -1;
+        data2.tm_year = yr1 - 1900;
+
+        printf("%d:%d:%d-%d:%d:%d\n", data1.tm_mday, data1.tm_mon + 1, data1.tm_year + 1900, data2.tm_mday, data2.tm_mon + 1, data2.tm_year + 1900);
+        pid = fork();
+        if(pid == 0){
+            int len;
+            uint16_t nlen;
+            free(buffer);
+            free(new_msg);
+            new_msg = extract_entries(data1, data2, t, porta);
+            len = strlen(new_msg) + 1;
+            nlen = htons(len);
+            ret = send(data_socket, (void*)&nlen, sizeof(uint16_t), 0);
+            if(ret < 0){
+                perror("Errore in comunicazione TCP: ");
+                free(new_msg);
+                exit(1);
+            }
+            ret = send(data_socket, (void*)new_msg, len, 0);
+            if(ret < 0){
+                perror("Errore in comunicazione TCP: ");
+                free(new_msg);
+                exit(1);
+            }
+            printf("-SISTEMA- inviato il messaggio %s al peer %d\n", new_msg, peer);
+            free(new_msg);
             exit(0);
         }
     }

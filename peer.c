@@ -1,7 +1,8 @@
+#include
 #include"peer_code/peer_headers.h"
 
 int main(int argc, char* argv[]){
-    int porta = atoi(argv[1]); //porta identificativa del peer
+    int porta, connected = 0;  //porta identificativa del peer
     int udp_socket,conn_socket, data_socket, ret; //udp_socket: socket utilizzato per le comunicazioni UDP, ret: int usato per i check
     struct sockaddr_in my_addr;//indirizzo del peer
     struct sockaddr_in neighbors[2]; //indirizzo dei neighbors
@@ -12,7 +13,11 @@ int main(int argc, char* argv[]){
     struct entry today_entries[2]; //Array con le entry del giorno (0 per T, 1 per N)
     struct aggr* aggr_list; //Puntatore alla lista dei valori aggregati gia' calcolati
 
-
+    if(argc != 2){
+        printf("-SISTEMA- Gli argomenti non sono stati passati correttamente. non posso avviare il servizio.");
+        exit(1);
+    }
+    porta = atoi(argv[1]);
     printf("---------- COVID 19 PEER %u STARTED -----------\n", porta);
     //attivazione dei socket e collegamento con la porta del peer
     udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -37,7 +42,11 @@ int main(int argc, char* argv[]){
         perror("Listen error: ");
         exit(1);
     }
-    //Creazione delle entry del giorno, inizializzate alla data di oggi e con value 0
+    //Inizializzo i neighbors ai valori di "non connessione"
+    neighbors[0].sin_family = neighbors[1].sin_family = AF_INET;
+    neighbors[0].sin_port = neighbors[1].sin_port = 0;
+    neighbors[0].sin_addr.s_addr = neighbors[1].sin_addr.s_addr = 0;
+            //Creazione delle entry del giorno, inizializzate alla data di oggi e con value 0
     entries_initializer(today_entries);
 
     //all'inizio non ho valori gggregati calcolati: il puntatore punta a NULL
@@ -88,6 +97,9 @@ int main(int argc, char* argv[]){
             fgets(input, 50, stdin);
             elab = strtok(input, " \n");
             if(strcmp(elab, "stop") == 0) {
+                while(wait(&ret) >= 0){
+                    //aspetto che terminino tutti i processi figli (elaborazioni di dati richieste da altri peer
+                }
                 if(ds_addr == NULL)
                     break;
                 send_entries(porta, neighbors[0], today_entries);
@@ -107,8 +119,14 @@ int main(int argc, char* argv[]){
                     ds_addr->sin_family = AF_INET;
                     ds_addr->sin_port = htons(ds_port);
                     inet_pton(AF_INET, ds_ip, &ds_addr->sin_addr.s_addr);
-                    start(udp_socket, *ds_addr, porta, neighbors);
-                    printf("-SISTEMA- I neighbors assegnati sono i peer %u e %u\n", ntohs(neighbors[0].sin_port), ntohs(neighbors[1].sin_port));
+                    connected = start(udp_socket, *ds_addr, porta, neighbors);
+                    if(connected == 0) {
+                        free(ds_addr);
+                        ds_addr = NULL;
+                        printf("la connessione non e' andata a buon fine\n");
+                    }
+                    else
+                        printf("-SISTEMA- I neighbors assegnati sono i peer %u e %u\n", ntohs(neighbors[0].sin_port), ntohs(neighbors[1].sin_port));
                 }else
                     //start quando la connessione e' gia' stata stabilita
                     printf("-SISTEMA- Il peer e' gia' connesso al DS\n");

@@ -15,7 +15,7 @@ struct aggr{
 };
 
 //peer_udp_conn.c
-void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockaddr_in neighbors[2]);
+int start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockaddr_in neighbors[2]);
 void stop(int sd, struct sockaddr_in ds_addr);
 int udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in neighbors[2]);
 
@@ -28,6 +28,7 @@ void entries_initializer(struct entry entries[2]);
 void append_entries(struct entry entries[2], int porta);
 int date_offset(struct tm data1, struct tm data2);
 int look_for_entries(char type, struct tm data1, struct tm data2, int peer);
+char* extract_entries(struct tm data1, struct tm data2, char type, int peer);
 
 //peer_tcp_conn.c
 void tcp_conn(int data_socket, struct sockaddr_in tcp_addr, struct entry entries[2], struct aggr** aggregates, int porta, struct sockaddr_in neighbors[2]);

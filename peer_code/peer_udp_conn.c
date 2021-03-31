@@ -15,15 +15,19 @@ int udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in neighbors[2]
         //Messaggio di chiusura del DS: invio l'ack e
         // chiudo la connessione
         ret = sendto(sd, buffer, sizeof(buffer), 0, (struct sockaddr*)&ds_addr, addr_size);
-        if (ret < 0)
+        if (ret < 0) {
             perror("Errore di comunicazione col DS: ");
+            return 1;
+        }
         return 0;
     }
     if (strcmp(buffer, "ENDD") == 0){
         //Messaggio di chiusura delle entries del giorno: invio l'ack e aggiorno il register
         ret = sendto(sd, buffer, sizeof(buffer), 0, (struct sockaddr*)&ds_addr, addr_size);
-        if (ret < 0)
+        if (ret < 0) {
             perror("Errore di comunicazione col DS: ");
+            return 1;
+        }
         return 2;
     }
     else {
@@ -41,14 +45,16 @@ int udp_comm(int sd, struct sockaddr_in ds_addr, struct sockaddr_in neighbors[2]
             neighbors[1].sin_addr.s_addr = n2_ip;
         }
         ret = sendto(sd, buffer, sizeof(buffer), 0, (struct sockaddr *) &ds_addr, addr_size);
-        if (ret < 0)
+        if (ret < 0) {
             perror("Errore di comunicazione col DS: ");
+            return 1;
+        }
         return 1;
     }
 
 }
 
-void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockaddr_in neighbors[2]){
+int start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockaddr_in neighbors[2]){
     int ret;
     unsigned int n1_port, n2_port;
     unsigned long n1_ip, n2_ip;
@@ -68,7 +74,7 @@ void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockadd
         ret = sendto(udp_socket, buffer, MSG_STD_LEN, 0, (struct sockaddr*) &ds_addr, size_addr);
         if(ret < 0) {
             perror("Errore di comunicazione col DS: ");
-            continue;
+            return 0;
         }
         printf("-SISTEMA- inviato il messaggio di boot %s al DS sulla porta %u\n", buffer, ntohs(ds_addr.sin_port));
         free(buffer);
@@ -80,9 +86,9 @@ void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockadd
             memset(buffer, 0, 34);
             memset(&ds_addr, 0, size_addr);
             ret = recvfrom(udp_socket, buffer, 34, 0, (struct sockaddr *) &ds_addr, &size_addr);
-            if (ret < 0) {
+            if(ret < 0) {
                 perror("Errore di comunicazione col DS: ");
-                continue;
+                return 0;
             }
             sscanf(buffer, "%lu:%u %lu:%u", &n1_ip, &n1_port, &n2_ip, &n2_port);
             printf("-SISTEMA- Ricevuto il messagio %lu:%u %lu:%u dal DS sulla porta %u\n", n1_ip, n1_port, n2_ip, n2_port, ntohs(ds_addr.sin_port));
@@ -104,6 +110,7 @@ void start(int udp_socket, struct sockaddr_in ds_addr, int porta, struct sockadd
     ret = sendto(udp_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&ds_addr, size_addr);
     if (ret < 0)
         perror("Errore di comunicazione col DS: ");
+    return 1;
 }
 
 void stop(int sd, struct sockaddr_in ds_addr){
@@ -115,8 +122,10 @@ void stop(int sd, struct sockaddr_in ds_addr){
 
     strcpy(buffer, "STOP");
     ret = sendto(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr*)&ds_addr, addr_len);
-    if(ret < 0)
+    if(ret < 0) {
         perror("Errore di comunicazione col DS: ");
+        return;
+    }
     printf("-SISTEMA- Inviato messaggio %s al DS %u\n", buffer, ntohs(ds_addr.sin_port));
     while(1){
         FD_ZERO(&read_fds);
@@ -129,8 +138,10 @@ void stop(int sd, struct sockaddr_in ds_addr){
             memset(buffer, 0, MSG_STD_LEN);
             memset(&ds_addr, 0, addr_len);
             ret = recvfrom(sd, buffer, MSG_STD_LEN, 0, (struct sockaddr*)&ds_addr, &addr_len);
-            if(ret < 0)
+            if(ret < 0) {
                 perror("Errore di comunicazione col DS: ");
+                return;
+            }
             printf("-SISTEMA- Ricevuto messaggio %s dal DS %u\n", buffer, ntohs(ds_addr.sin_port));
             if(strcmp("STOP", buffer) == 0 && ds_port == ntohs(ds_addr.sin_port))
                 break;
